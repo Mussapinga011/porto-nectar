@@ -141,13 +141,11 @@ const Quay = () => {
    Fixo no cais — posição absoluta no mundo
    worldX = shipData.x + craneLocalX
    Z fixo junto à borda do cais (-10)
-   Y=0 = nível do cais (surface y≈8.5)
+   Y=0 = nível do cais (surface y≈8)
 ───────────────────────────────────────── */
 const DischargeHopper = ({ worldX }) => {
-  // O cais tem surface em y≈8.5 (mesh position y=-7, height=30 → top = -7+15 = 8)
-  // Colocamos o grupo na posição mundial absoluta
   const quaySurfaceY = 8;
-  const hopperZ = -8; // junto à borda do cais, do lado do navio
+  const hopperZ = -18; // Posicionado corretamente sob a grua no cais
 
   return (
     <group position={[worldX, quaySurfaceY, hopperZ]}>
@@ -213,7 +211,7 @@ const DischargeHopper = ({ worldX }) => {
    CAMINHÃO
 ───────────────────────────────────────── */
 const TruckBelow = ({ x }) => (
-  <group position={[x, -8, 6]}>
+  <group position={[x, 1.8, 0]}>
     {/* Cabine */}
     <mesh position={[-9, 4.5, 0]} castShadow>
       <boxGeometry args={[5, 6, 8]} />
@@ -321,134 +319,159 @@ const inPhase = (p, phase) => p >= phase[0] && p < phase[1];
 const lerpPhase = (p, phase) => (p - phase[0]) / (phase[1] - phase[0]);
 
 const DeckCrane = ({ localX, localZ, phase, active }) => {
+  const slewGroupRef = useRef();
   const boomRef = useRef();
   const cableRef = useRef();
+  const grabGroupRef = useRef();
   const grabRef = useRef();
 
   const progressRef = useRef(phase); // 0..1 ciclo completo
   const isOpenRef = useRef(false);
   const hasLoadRef = useRef(false);
 
-  const BOOM_DOWN_ANGLE = -0.45;   // lança apontando para o porão
-  const BOOM_UP_ANGLE   =  0.0;   // lança na horizontal
-  const BOOM_OUT_ANGLE  =  0.45;  // lança apontando para o cais
-
-  const CABLE_SHORT = -3;
-  const CABLE_LONG  = -22;
+  const SLEW_HOLD = Math.PI;
+  const SLEW_QUAY = 0;
+  
+  const BOOM_HOLD = 1.08;
+  const BOOM_QUAY = 0.63;
+  
+  const CABLE_UP = -12;
+  const CABLE_DOWN_HOLD = -44;
+  const CABLE_DOWN_QUAY = -20.2;
 
   useFrame((state, delta) => {
     if (!active) return;
     progressRef.current = (progressRef.current + delta * 0.18) % 1;
     const p = progressRef.current;
 
-    if (!boomRef.current || !cableRef.current) return;
+    if (!boomRef.current || !grabGroupRef.current || !slewGroupRef.current || !cableRef.current) return;
 
     if (inPhase(p, PHASES.DESCER_PORAO)) {
       const t = lerpPhase(p, PHASES.DESCER_PORAO);
-      boomRef.current.rotation.x = THREE.MathUtils.lerp(BOOM_UP_ANGLE, BOOM_DOWN_ANGLE, t);
-      cableRef.current.position.y = THREE.MathUtils.lerp(CABLE_SHORT, CABLE_LONG, t);
-      isOpenRef.current = false; hasLoadRef.current = false;
+      slewGroupRef.current.rotation.y = SLEW_HOLD;
+      boomRef.current.rotation.x = BOOM_HOLD;
+      grabGroupRef.current.position.y = THREE.MathUtils.lerp(CABLE_UP, CABLE_DOWN_HOLD, t);
+      isOpenRef.current = true; hasLoadRef.current = false;
     } else if (inPhase(p, PHASES.PEGAR)) {
-      boomRef.current.rotation.x = BOOM_DOWN_ANGLE;
-      cableRef.current.position.y = CABLE_LONG;
+      slewGroupRef.current.rotation.y = SLEW_HOLD;
+      boomRef.current.rotation.x = BOOM_HOLD;
+      grabGroupRef.current.position.y = CABLE_DOWN_HOLD;
       const t = lerpPhase(p, PHASES.PEGAR);
-      if (t < 0.4) { isOpenRef.current = true; hasLoadRef.current = false; }
+      if (t < 0.5) { isOpenRef.current = true; hasLoadRef.current = false; }
       else { isOpenRef.current = false; hasLoadRef.current = true; }
     } else if (inPhase(p, PHASES.SUBIR)) {
       const t = lerpPhase(p, PHASES.SUBIR);
-      boomRef.current.rotation.x = BOOM_DOWN_ANGLE;
-      cableRef.current.position.y = THREE.MathUtils.lerp(CABLE_LONG, CABLE_SHORT, t);
+      slewGroupRef.current.rotation.y = SLEW_HOLD;
+      boomRef.current.rotation.x = BOOM_HOLD;
+      grabGroupRef.current.position.y = THREE.MathUtils.lerp(CABLE_DOWN_HOLD, CABLE_UP, t);
       isOpenRef.current = false; hasLoadRef.current = true;
     } else if (inPhase(p, PHASES.GIRAR)) {
       const t = lerpPhase(p, PHASES.GIRAR);
-      boomRef.current.rotation.x = THREE.MathUtils.lerp(BOOM_DOWN_ANGLE, BOOM_OUT_ANGLE, t);
-      cableRef.current.position.y = CABLE_SHORT;
+      const smoothT = t * t * (3 - 2 * t);
+      slewGroupRef.current.rotation.y = THREE.MathUtils.lerp(SLEW_HOLD, SLEW_QUAY, smoothT);
+      boomRef.current.rotation.x = THREE.MathUtils.lerp(BOOM_HOLD, BOOM_QUAY, smoothT);
+      grabGroupRef.current.position.y = CABLE_UP;
       hasLoadRef.current = true;
     } else if (inPhase(p, PHASES.DESCER_FUNIL)) {
       const t = lerpPhase(p, PHASES.DESCER_FUNIL);
-      boomRef.current.rotation.x = BOOM_OUT_ANGLE;
-      cableRef.current.position.y = THREE.MathUtils.lerp(CABLE_SHORT, CABLE_LONG * 0.7, t);
+      slewGroupRef.current.rotation.y = SLEW_QUAY;
+      boomRef.current.rotation.x = BOOM_QUAY;
+      grabGroupRef.current.position.y = THREE.MathUtils.lerp(CABLE_UP, CABLE_DOWN_QUAY, t);
       hasLoadRef.current = true; isOpenRef.current = false;
     } else if (inPhase(p, PHASES.DESCARREGAR)) {
-      boomRef.current.rotation.x = BOOM_OUT_ANGLE;
-      cableRef.current.position.y = CABLE_LONG * 0.7;
+      slewGroupRef.current.rotation.y = SLEW_QUAY;
+      boomRef.current.rotation.x = BOOM_QUAY;
+      grabGroupRef.current.position.y = CABLE_DOWN_QUAY;
       isOpenRef.current = true; hasLoadRef.current = false;
-      // Camera shake
       const shakeAmt = 0.5 * (1 - lerpPhase(p, PHASES.DESCARREGAR));
       state.camera.position.x += (Math.random() - 0.5) * shakeAmt;
       state.camera.position.y += (Math.random() - 0.5) * shakeAmt;
     } else { // VOLTAR
       const t = lerpPhase(p, PHASES.VOLTAR);
-      boomRef.current.rotation.x = THREE.MathUtils.lerp(BOOM_OUT_ANGLE, BOOM_UP_ANGLE, t);
-      cableRef.current.position.y = THREE.MathUtils.lerp(CABLE_LONG * 0.7, CABLE_SHORT, t);
-      isOpenRef.current = false; hasLoadRef.current = false;
+      const smoothT = t * t * (3 - 2 * t);
+      slewGroupRef.current.rotation.y = THREE.MathUtils.lerp(SLEW_QUAY, SLEW_HOLD, smoothT);
+      boomRef.current.rotation.x = THREE.MathUtils.lerp(BOOM_QUAY, BOOM_HOLD, smoothT);
+      grabGroupRef.current.position.y = THREE.MathUtils.lerp(CABLE_DOWN_QUAY, CABLE_UP, t);
+      isOpenRef.current = true; hasLoadRef.current = false;
     }
+
+    // Esticar o cabo visualmente
+    const drop = grabGroupRef.current.position.y;
+    cableRef.current.scale.y = Math.max(0.01, Math.abs(drop));
+    cableRef.current.position.y = drop / 2;
   });
 
   return (
     <group position={[localX, 0, localZ]}>
-      {/* Base rotativa do guindaste */}
+      {/* Base rotativa fixa */}
       <mesh position={[0, 0.5, 0]} castShadow>
         <cylinderGeometry args={[3.5, 4, 3, 16]} />
         <meshStandardMaterial color={0x475569} roughness={0.5} metalness={0.6} />
       </mesh>
 
-      {/* Torre */}
-      <mesh position={[0, 10, 0]} castShadow>
-        <boxGeometry args={[3, 20, 3]} />
-        <meshStandardMaterial color={0x334155} roughness={0.5} metalness={0.5} />
-      </mesh>
-
-      {/* Cabine do operador */}
-      <mesh position={[2, 16, 0]} castShadow>
-        <boxGeometry args={[4, 4, 4]} />
-        <meshStandardMaterial color={0x1e3a8a} roughness={0.4} />
-      </mesh>
-      <mesh position={[3.2, 16, 0]}>
-        <boxGeometry args={[0.1, 3, 3]} />
-        <meshStandardMaterial color={0x7dd3fc} roughness={0.1} metalness={0.0} transparent opacity={0.7} />
-      </mesh>
-
-      {/* Contrapeso */}
-      <mesh position={[-3.5, 19, 0]} castShadow>
-        <boxGeometry args={[5, 3, 4]} />
-        <meshStandardMaterial color={0x64748b} roughness={0.5} metalness={0.4} />
-      </mesh>
-
-      {/* Lança principal articulada */}
-      <group ref={boomRef} position={[0, 20, 0]} rotation={[0, 0, 0]}>
-        {/* Corpo da lança */}
-        <mesh position={[0, 0, -15]} castShadow>
-          <boxGeometry args={[2.5, 2.5, 30]} />
-          <meshStandardMaterial color={0xf97316} roughness={0.4} metalness={0.4} />
-        </mesh>
-        {/* Extensão da lança */}
-        <mesh position={[0, 0, -32]} castShadow>
-          <boxGeometry args={[1.8, 1.8, 8]} />
-          <meshStandardMaterial color={0xf97316} roughness={0.4} metalness={0.4} />
+      {/* Secção superior que roda (slew) */}
+      <group ref={slewGroupRef}>
+        {/* Torre */}
+        <mesh position={[0, 10, 0]} castShadow>
+          <boxGeometry args={[3, 20, 3]} />
+          <meshStandardMaterial color={0x334155} roughness={0.5} metalness={0.5} />
         </mesh>
 
-        {/* Polia na ponta da lança */}
-        <mesh position={[0, 0, -36]} castShadow>
-          <sphereGeometry args={[1.5, 8, 8]} />
-          <meshStandardMaterial color={0x94a3b8} metalness={0.8} roughness={0.2} />
+        {/* Cabine do operador */}
+        <mesh position={[2, 16, 0]} castShadow>
+          <boxGeometry args={[4, 4, 4]} />
+          <meshStandardMaterial color={0x1e3a8a} roughness={0.4} />
+        </mesh>
+        <mesh position={[3.2, 16, 0]}>
+          <boxGeometry args={[0.1, 3, 3]} />
+          <meshStandardMaterial color={0x7dd3fc} roughness={0.1} metalness={0.0} transparent opacity={0.7} />
         </mesh>
 
-        {/* Cabo + garra */}
-        <group ref={cableRef} position={[0, CABLE_SHORT, -36]}>
-          {/* Cabo de aço */}
-          <mesh position={[0, 0, 0]}>
-            <cylinderGeometry args={[0.18, 0.18, 20, 6]} />
-            <meshStandardMaterial color={0x1e293b} roughness={0.9} />
+        {/* Contrapeso */}
+        <mesh position={[-3.5, 19, 0]} castShadow>
+          <boxGeometry args={[5, 3, 4]} />
+          <meshStandardMaterial color={0x64748b} roughness={0.5} metalness={0.4} />
+        </mesh>
+
+        {/* Lança principal articulada */}
+        <group ref={boomRef} position={[0, 20, 0]} rotation={[0, 0, 0]}>
+          {/* Corpo da lança */}
+          <mesh position={[0, 0, -15]} castShadow>
+            <boxGeometry args={[2.5, 2.5, 30]} />
+            <meshStandardMaterial color={0xf97316} roughness={0.4} metalness={0.4} />
           </mesh>
-          {/* Bloco de moitão */}
-          <mesh position={[0, -10, 0]} castShadow>
-            <boxGeometry args={[2.5, 2, 2.5]} />
-            <meshStandardMaterial color={0x78716c} metalness={0.6} roughness={0.3} />
+          {/* Extensão da lança */}
+          <mesh position={[0, 0, -32]} castShadow>
+            <boxGeometry args={[1.8, 1.8, 8]} />
+            <meshStandardMaterial color={0xf97316} roughness={0.4} metalness={0.4} />
           </mesh>
-          {/* Garra clamshell */}
-          <group position={[0, -12, 0]}>
-            <ClamshellGrab grabRef={grabRef} isOpenRef={isOpenRef} hasLoadRef={hasLoadRef} />
+
+          {/* Polia na ponta da lança */}
+          <mesh position={[0, 0, -36]} castShadow>
+            <sphereGeometry args={[1.5, 8, 8]} />
+            <meshStandardMaterial color={0x94a3b8} metalness={0.8} roughness={0.2} />
+          </mesh>
+
+          {/* Sistema de cabos e moitão originado na ponta */}
+          <group position={[0, 0, -36]}>
+            {/* Cabo de aço que estica */}
+            <mesh ref={cableRef}>
+              <cylinderGeometry args={[0.18, 0.18, 1, 6]} />
+              <meshStandardMaterial color={0x1e293b} roughness={0.9} />
+            </mesh>
+            
+            {/* Moitão e Garra (movem-se no eixo Y local) */}
+            <group ref={grabGroupRef} position={[0, CABLE_UP, 0]}>
+              {/* Bloco de moitão */}
+              <mesh position={[0, 0, 0]} castShadow>
+                <boxGeometry args={[2.5, 2, 2.5]} />
+                <meshStandardMaterial color={0x78716c} metalness={0.6} roughness={0.3} />
+              </mesh>
+              {/* Garra clamshell */}
+              <group position={[0, -2, 0]}>
+                <ClamshellGrab grabRef={grabRef} isOpenRef={isOpenRef} hasLoadRef={hasLoadRef} />
+              </group>
+            </group>
           </group>
         </group>
       </group>
