@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply m-0 overflow-hidden bg-slate-950 text-slate-100 select-none antialiased;
+  }
+}
+
+/* Custom UI animations and overrides */
+.glass-panel {
+  @apply bg-slate-900/80 backdrop-blur-xl border border-white/10 shadow-2xl;
+}
+
+.text-glow {
+  text-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+}
