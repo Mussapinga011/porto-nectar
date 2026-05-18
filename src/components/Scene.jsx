@@ -557,11 +557,11 @@ const BulkCarrierShip = ({ shipData, index, active }) => {
 const CameraAnimator = ({ focusedShipIndex, shipsData }) => {
   const { camera, controls } = useThree();
   
-  // 1. DEFINIÇÃO DE CONSTANTES (Eixos Y e Z bloqueados para manter perspetiva 2.5D constante)
-  const FIXED_CAM_Y = 400;   // Altura da câmara
-  const FIXED_CAM_Z = 900;   // Distância da câmara
-  const FIXED_TARGET_Y = 20; // Altura para onde a câmara aponta
-  const FIXED_TARGET_Z = 28; // Profundidade para onde a câmara aponta
+  // 1. DEFINIÇÃO DE CONSTANTES (Eixos Y e Z bloqueados para manter perspetiva 2.5D constante e detalhada)
+  const FIXED_CAM_Y = 300;    // Altura da câmara
+  const FIXED_CAM_Z = -500;   // Distância da câmara (agora no lado do cais, valor negativo)
+  const FIXED_TARGET_Y = 10;  // Altura para onde a câmara aponta
+  const FIXED_TARGET_Z = 0;   // Profundidade para onde a câmara aponta
 
   const baseTargetRef = useRef(new THREE.Vector3(0, FIXED_TARGET_Y, FIXED_TARGET_Z));
 
@@ -641,8 +641,8 @@ const Scene3D = ({ focusedShipIndex, onShipSelect, shipsData }) => {
       <color attach="background" args={['#020c1b']} />
       <fogExp2 attach="fog" args={['#020c1b', 0.0007]} />
 
-      {/* Câmara inicializada na mesma altura e profundidade das constantes */}
-      <PerspectiveCamera makeDefault position={[0, 400, 900]} fov={35} near={10} far={9000} />
+      {/* Câmara inicializada na mesma altura e profundidade das constantes (no lado do cais) */}
+      <PerspectiveCamera makeDefault position={[0, 300, -500]} fov={35} near={10} far={9000} />
 
       <OrbitControls
         makeDefault
@@ -653,9 +653,9 @@ const Scene3D = ({ focusedShipIndex, onShipSelect, shipsData }) => {
         minPolarAngle={fixedPolarAngle}
         maxPolarAngle={fixedPolarAngle}
         
-        // Bloqueia rotação horizontal
-        minAzimuthAngle={0}
-        maxAzimuthAngle={0}
+        // Bloqueia rotação horizontal (rotacionado a 180° para olhar em direção ao mar/Z positivo)
+        minAzimuthAngle={Math.PI}
+        maxAzimuthAngle={Math.PI}
         
         // Desativa zoom manual para manter a escala perfeita do cais
         enableZoom={false}
@@ -680,9 +680,10 @@ const Scene3D = ({ focusedShipIndex, onShipSelect, shipsData }) => {
       <CameraAnimator focusedShipIndex={focusedShipIndex} shipsData={shipsData} />
 
       <hemisphereLight args={[0xd4e8ff, 0x0a1628, 0.6]} />
-      <directionalLight position={[300, 400, 200]} intensity={2.2} color={0xfff8f0} castShadow shadow-bias={-0.0004} shadow-mapSize={[2048, 2048]} shadow-camera-left={-800} shadow-camera-right={800} shadow-camera-top={400} shadow-camera-bottom={-400} />
-      <directionalLight position={[-200, 200, -100]} intensity={0.5} color={0x4488cc} />
-      <pointLight position={[0, 50, -200]} intensity={1} color={0xffcc88} distance={700} />
+      {/* Luzes ajustadas para iluminar a frente dos navios e do cais a partir do novo ponto de vista */}
+      <directionalLight position={[300, 400, -200]} intensity={2.2} color={0xfff8f0} castShadow shadow-bias={-0.0004} shadow-mapSize={[2048, 2048]} shadow-camera-left={-800} shadow-camera-right={800} shadow-camera-top={400} shadow-camera-bottom={-400} />
+      <directionalLight position={[-200, 200, 100]} intensity={0.5} color={0x4488cc} />
+      <pointLight position={[0, 50, 200]} intensity={1} color={0xffcc88} distance={700} />
 
       <Ocean />
       <Quay />
