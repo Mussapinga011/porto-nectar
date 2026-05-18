@@ -14,41 +14,16 @@ const WATER_NORMALS_URL =
    OCEAN
 ───────────────────────────────────────── */
 const Ocean = () => {
-  const ref = useRef();
-  const gl = useThree((s) => s.gl);
-  const waterNormals = useMemo(
-    () =>
-      new THREE.TextureLoader().load(WATER_NORMALS_URL, (t) => {
-        t.wrapS = t.wrapT = THREE.RepeatWrapping;
-      }),
-    []
-  );
-  useFrame((state, delta) => {
-    if (ref.current) {
-      ref.current.material.uniforms.time.value += delta * 0.6;
-      ref.current.rotation.z = Math.sin(state.clock.elapsedTime * 0.02) * 0.002;
-    }
-  });
   return (
-    <water
-      ref={ref}
-      args={[
-        new THREE.PlaneGeometry(12000, 12000, 256, 256),
-        {
-          textureWidth: 1024,
-          textureHeight: 1024,
-          waterNormals,
-          sunDirection: new THREE.Vector3(250, 350, 150).normalize(),
-          sunColor: 0xfff2e0,
-          waterColor: 0x001a2b,
-          distortionScale: 4.2,
-          fog: true,
-          alpha: 0.85,
-          format: gl.encoding,
-        },
-      ]}
-      rotation-x={-Math.PI / 2}
-    />
+    <mesh rotation-x={-Math.PI / 2} position={[0, 0, 0]} receiveShadow>
+      <planeGeometry args={[12000, 12000]} />
+      <meshStandardMaterial
+        color={0x0b3d5c}
+        roughness={0.3}
+        metalness={0.2}
+        emissive={0x021929}
+      />
+    </mesh>
   );
 };
 
@@ -217,26 +192,14 @@ const TruckBelow = ({ x }) => (
 /* ─────────────────────────────────────────
    GUINDASTE E GARRA
 ───────────────────────────────────────── */
-const ClamshellGrab = ({ grabRef, isOpenRef, hasLoadRef }) => {
-  const leftRef = useRef();
-  const rightRef = useRef();
-  const loadRef = useRef();
-
-  useFrame(() => {
-    if (!leftRef.current || !rightRef.current) return;
-    const targetAngle = isOpenRef.current ? 0.65 : 0.05;
-    leftRef.current.rotation.z += (targetAngle - leftRef.current.rotation.z) * 0.12;
-    rightRef.current.rotation.z += (-targetAngle - rightRef.current.rotation.z) * 0.12;
-    if (loadRef.current) loadRef.current.visible = hasLoadRef.current && !isOpenRef.current;
-  });
-
+const ClamshellGrab = () => {
   return (
-    <group ref={grabRef}>
+    <group>
       <mesh position={[0, 0, 0]} castShadow>
         <boxGeometry args={[3, 2, 8]} />
         <meshStandardMaterial color={0xb45309} roughness={0.5} metalness={0.5} />
       </mesh>
-      <group ref={leftRef} position={[-1.5, -1, 0]}>
+      <group position={[-1.5, -1, 0]} rotation-z={0.05}>
         <mesh position={[-2, -3, 0]} castShadow>
           <boxGeometry args={[1.2, 7, 7.5]} />
           <meshStandardMaterial color={0xc2410c} roughness={0.4} metalness={0.6} />
@@ -246,7 +209,7 @@ const ClamshellGrab = ({ grabRef, isOpenRef, hasLoadRef }) => {
           <meshStandardMaterial color={0x9a3412} roughness={0.3} metalness={0.7} />
         </mesh>
       </group>
-      <group ref={rightRef} position={[1.5, -1, 0]}>
+      <group position={[1.5, -1, 0]} rotation-z={-0.05}>
         <mesh position={[2, -3, 0]} castShadow>
           <boxGeometry args={[1.2, 7, 7.5]} />
           <meshStandardMaterial color={0xc2410c} roughness={0.4} metalness={0.6} />
@@ -256,110 +219,19 @@ const ClamshellGrab = ({ grabRef, isOpenRef, hasLoadRef }) => {
           <meshStandardMaterial color={0x9a3412} roughness={0.3} metalness={0.7} />
         </mesh>
       </group>
-      <mesh ref={loadRef} position={[0, -7, 0]} visible={false}>
-        <boxGeometry args={[5, 3, 7]} />
-        <meshStandardMaterial color={0xd4a96a} roughness={0.9} />
-      </mesh>
     </group>
   );
 };
 
-const PHASES = {
-  DESCER_PORAO: [0.00, 0.15],
-  PEGAR: [0.15, 0.25],
-  SUBIR: [0.25, 0.40],
-  GIRAR: [0.40, 0.60],
-  DESCER_FUNIL: [0.60, 0.75],
-  DESCARREGAR: [0.75, 0.85],
-  VOLTAR: [0.85, 1.00],
-};
-const inPhase = (p, phase) => p >= phase[0] && p < phase[1];
-const lerpPhase = (p, phase) => (p - phase[0]) / (phase[1] - phase[0]);
-
-const DeckCrane = ({ localX, localZ, phase, active }) => {
-  const slewGroupRef = useRef();
-  const boomRef = useRef();
-  const cableRef = useRef();
-  const grabGroupRef = useRef();
-  const grabRef = useRef();
-
-  const progressRef = useRef(phase);
-  const isOpenRef = useRef(false);
-  const hasLoadRef = useRef(false);
-
-  const SLEW_HOLD = Math.PI;
-  const SLEW_QUAY = 0;
-  const BOOM_HOLD = 1.08;
-  const BOOM_QUAY = 0.63;
-  const CABLE_UP = -12;
-  const CABLE_DOWN_HOLD = -44;
-  const CABLE_DOWN_QUAY = -20.2;
-
-  useFrame((state, delta) => {
-    if (!active) return;
-    progressRef.current = (progressRef.current + delta * 0.18) % 1;
-    const p = progressRef.current;
-
-    if (!boomRef.current || !grabGroupRef.current || !slewGroupRef.current || !cableRef.current) return;
-
-    if (inPhase(p, PHASES.DESCER_PORAO)) {
-      const t = lerpPhase(p, PHASES.DESCER_PORAO);
-      slewGroupRef.current.rotation.y = SLEW_HOLD;
-      boomRef.current.rotation.x = BOOM_HOLD;
-      grabGroupRef.current.position.y = THREE.MathUtils.lerp(CABLE_UP, CABLE_DOWN_HOLD, t);
-      isOpenRef.current = true; hasLoadRef.current = false;
-    } else if (inPhase(p, PHASES.PEGAR)) {
-      slewGroupRef.current.rotation.y = SLEW_HOLD;
-      boomRef.current.rotation.x = BOOM_HOLD;
-      grabGroupRef.current.position.y = CABLE_DOWN_HOLD;
-      const t = lerpPhase(p, PHASES.PEGAR);
-      if (t < 0.5) { isOpenRef.current = true; hasLoadRef.current = false; }
-      else { isOpenRef.current = false; hasLoadRef.current = true; }
-    } else if (inPhase(p, PHASES.SUBIR)) {
-      const t = lerpPhase(p, PHASES.SUBIR);
-      slewGroupRef.current.rotation.y = SLEW_HOLD;
-      boomRef.current.rotation.x = BOOM_HOLD;
-      grabGroupRef.current.position.y = THREE.MathUtils.lerp(CABLE_DOWN_HOLD, CABLE_UP, t);
-      isOpenRef.current = false; hasLoadRef.current = true;
-    } else if (inPhase(p, PHASES.GIRAR)) {
-      const t = lerpPhase(p, PHASES.GIRAR);
-      const smoothT = t * t * (3 - 2 * t);
-      slewGroupRef.current.rotation.y = THREE.MathUtils.lerp(SLEW_HOLD, SLEW_QUAY, smoothT);
-      boomRef.current.rotation.x = THREE.MathUtils.lerp(BOOM_HOLD, BOOM_QUAY, smoothT);
-      grabGroupRef.current.position.y = CABLE_UP;
-      hasLoadRef.current = true;
-    } else if (inPhase(p, PHASES.DESCER_FUNIL)) {
-      const t = lerpPhase(p, PHASES.DESCER_FUNIL);
-      slewGroupRef.current.rotation.y = SLEW_QUAY;
-      boomRef.current.rotation.x = BOOM_QUAY;
-      grabGroupRef.current.position.y = THREE.MathUtils.lerp(CABLE_UP, CABLE_DOWN_QUAY, t);
-      hasLoadRef.current = true; isOpenRef.current = false;
-    } else if (inPhase(p, PHASES.DESCARREGAR)) {
-      slewGroupRef.current.rotation.y = SLEW_QUAY;
-      boomRef.current.rotation.x = BOOM_QUAY;
-      grabGroupRef.current.position.y = CABLE_DOWN_QUAY;
-      isOpenRef.current = true; hasLoadRef.current = false;
-    } else {
-      const t = lerpPhase(p, PHASES.VOLTAR);
-      const smoothT = t * t * (3 - 2 * t);
-      slewGroupRef.current.rotation.y = THREE.MathUtils.lerp(SLEW_QUAY, SLEW_HOLD, smoothT);
-      boomRef.current.rotation.x = THREE.MathUtils.lerp(BOOM_QUAY, BOOM_HOLD, smoothT);
-      grabGroupRef.current.position.y = THREE.MathUtils.lerp(CABLE_DOWN_QUAY, CABLE_UP, t);
-      isOpenRef.current = true; hasLoadRef.current = false;
-    }
-
-    const drop = grabGroupRef.current.position.y;
-    cableRef.current.scale.y = Math.max(0.01, Math.abs(drop));
-    cableRef.current.position.y = drop / 2;
-  });
-
+const DeckCrane = ({ localX, localZ }) => {
+  const CABLE_LENGTH = 13;
   return (
     <group position={[localX, 0, localZ]}>
       <mesh position={[0, 0.5, 0]} castShadow>
         <cylinderGeometry args={[4, 4.5, 4, 16]} />
         <meshStandardMaterial color={0x475569} roughness={0.5} metalness={0.6} />
       </mesh>
-      <group ref={slewGroupRef}>
+      <group rotation-y={0}>
         <mesh position={[0, 10, 0]} castShadow>
           <cylinderGeometry args={[3, 3.5, 20, 8]} />
           <meshStandardMaterial color={0x334155} roughness={0.5} metalness={0.5} />
@@ -376,7 +248,7 @@ const DeckCrane = ({ localX, localZ, phase, active }) => {
           <boxGeometry args={[6, 4, 4.5]} />
           <meshStandardMaterial color={0x64748b} roughness={0.5} metalness={0.4} />
         </mesh>
-        <group ref={boomRef} position={[0, 20, 0]}>
+        <group position={[0, 20, 0]} rotation-x={0.70}>
           <mesh position={[0, 0, -15]} castShadow>
             <boxGeometry args={[3, 3, 30]} />
             <meshStandardMaterial color={0xf97316} roughness={0.4} metalness={0.4} />
@@ -390,17 +262,17 @@ const DeckCrane = ({ localX, localZ, phase, active }) => {
             <meshStandardMaterial color={0x94a3b8} metalness={0.8} roughness={0.2} />
           </mesh>
           <group position={[0, 0, -36]}>
-            <mesh ref={cableRef}>
+            <mesh position={[0, -CABLE_LENGTH / 2, 0]} scale-y={CABLE_LENGTH}>
               <cylinderGeometry args={[0.15, 0.15, 1, 6]} />
               <meshStandardMaterial color={0x1e293b} roughness={0.9} />
             </mesh>
-            <group ref={grabGroupRef} position={[0, CABLE_UP, 0]}>
+            <group position={[0, -CABLE_LENGTH, 0]}>
               <mesh position={[0, 0, 0]} castShadow>
                 <boxGeometry args={[2.5, 2, 2.5]} />
                 <meshStandardMaterial color={0x78716c} metalness={0.6} roughness={0.3} />
               </mesh>
               <group position={[0, -2, 0]}>
-                <ClamshellGrab grabRef={grabRef} isOpenRef={isOpenRef} hasLoadRef={hasLoadRef} />
+                <ClamshellGrab />
               </group>
             </group>
           </group>
