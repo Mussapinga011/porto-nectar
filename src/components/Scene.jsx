@@ -556,30 +556,67 @@ const BulkCarrierShip = ({ shipData, index, active }) => {
 ───────────────────────────────────────── */
 const CameraAnimator = ({ focusedShipIndex, shipsData }) => {
   const { camera, controls } = useThree();
-  const baseTargetRef = useRef(new THREE.Vector3(0, 0, -60));
+  
+  // 1. DEFINIÇÃO DE CONSTANTES (Eixos Y e Z bloqueados para manter perspetiva 2.5D constante)
+  const FIXED_CAM_Y = 400;   // Altura da câmara
+  const FIXED_CAM_Z = 900;   // Distância da câmara
+  const FIXED_TARGET_Y = 20; // Altura para onde a câmara aponta
+  const FIXED_TARGET_Z = 28; // Profundidade para onde a câmara aponta
+
+  const baseTargetRef = useRef(new THREE.Vector3(0, FIXED_TARGET_Y, FIXED_TARGET_Z));
 
   useEffect(() => {
     if (!controls) return;
-    let targetPos, camPos;
-    if (focusedShipIndex === -1) {
-      targetPos = new THREE.Vector3(0, 0, -60);
-      camPos = new THREE.Vector3(0, 600, 1100);
-    } else {
+    
+    let targetXVal = 0;
+    if (focusedShipIndex !== -1) {
       const ship = shipsData[focusedShipIndex];
-      targetPos = new THREE.Vector3(ship.x, 20, 28);
-      camPos = new THREE.Vector3(ship.x - 140, 150, 300);
+      targetXVal = ship.x;
     }
-    new TWEEN.Tween(camera.position).to(camPos, 2000).easing(TWEEN.Easing.Quartic.InOut).start();
-    new TWEEN.Tween(baseTargetRef.current).to(targetPos, 2000).easing(TWEEN.Easing.Quartic.InOut).start();
+    
+    // Anima apenas o eixo X do alvo do controlo
+    const targetObj = { x: baseTargetRef.current.x };
+    const targetTween = new TWEEN.Tween(targetObj)
+      .to({ x: targetXVal }, 1500)
+      .easing(TWEEN.Easing.Cubic.Out)
+      .onUpdate(() => {
+        baseTargetRef.current.x = targetObj.x;
+        controls.target.x = targetObj.x;
+      })
+      .start();
+
+    // Anima apenas o eixo X da câmara
+    const camObj = { x: camera.position.x };
+    const camTween = new TWEEN.Tween(camObj)
+      .to({ x: targetXVal }, 1500)
+      .easing(TWEEN.Easing.Cubic.Out)
+      .onUpdate(() => {
+        camera.position.x = camObj.x;
+      })
+      .start();
+      
+    return () => {
+      targetTween.stop();
+      camTween.stop();
+    };
   }, [focusedShipIndex, camera, controls, shipsData]);
 
   useFrame(() => {
     TWEEN.update();
     if (controls) {
-      controls.target.copy(baseTargetRef.current);
-      controls.target.y += Math.sin(Date.now() * 0.001) * 1.5;
+      // Bloqueia e corrige a altura e profundidade do alvo (mantendo o flutuar suave no Y)
+      controls.target.y = FIXED_TARGET_Y + Math.sin(Date.now() * 0.001) * 1.5;
+      controls.target.z = FIXED_TARGET_Z;
+
+      // Bloqueia e corrige a altura e profundidade da câmara
+      camera.position.y = FIXED_CAM_Y;
+      camera.position.z = FIXED_CAM_Z;
+      
+      // Sincroniza a posição atual de arrasto manual de volta para o Ref base
+      baseTargetRef.current.x = controls.target.x;
     }
   });
+
   return null;
 };
 
@@ -592,6 +629,9 @@ const Scene3D = ({ focusedShipIndex, onShipSelect, shipsData }) => {
     else onShipSelect(-1);
   };
 
+  // Bloqueio de rotação vertical e horizontal para fixar o ângulo 2.5D
+  const fixedPolarAngle = Math.PI / 3; // ~60 graus
+
   return (
     <Canvas
       shadows
@@ -601,8 +641,42 @@ const Scene3D = ({ focusedShipIndex, onShipSelect, shipsData }) => {
       <color attach="background" args={['#020c1b']} />
       <fogExp2 attach="fog" args={['#020c1b', 0.0007]} />
 
-      <PerspectiveCamera makeDefault position={[0, 600, 1100]} fov={35} near={10} far={9000} />
-      <OrbitControls makeDefault enableDamping dampingFactor={0.05} maxPolarAngle={Math.PI / 2 - 0.03} minDistance={60} maxDistance={2500} />
+      {/* Câmara inicializada na mesma altura e profundidade das constantes */}
+      <PerspectiveCamera makeDefault position={[0, 400, 900]} fov={35} near={10} far={9000} />
+
+      <OrbitControls
+        makeDefault
+        enableDamping
+        dampingFactor={0.05}
+        
+        // Bloqueia rotação vertical
+        minPolarAngle={fixedPolarAngle}
+        maxPolarAngle={fixedPolarAngle}
+        
+        // Bloqueia rotação horizontal
+        minAzimuthAngle={0}
+        maxAzimuthAngle={0}
+        
+        // Desativa zoom manual para manter a escala perfeita do cais
+        enableZoom={false}
+        
+        // Permite pan (arrastar)
+        enablePan={true}
+        
+        // Permite arrastar com botão esquerdo (pan horizontal)
+        mouseButtons={{
+          LEFT: THREE.MOUSE.PAN,
+          MIDDLE: THREE.MOUSE.DOLLY,
+          RIGHT: THREE.MOUSE.ROTATE
+        }}
+        
+        // Permite arrastar com 1 dedo em ecrãs táteis/mobile
+        touches={{
+          ONE: THREE.TOUCH.PAN,
+          TWO: THREE.TOUCH.DOLLY_PAN
+        }}
+      />
+      
       <CameraAnimator focusedShipIndex={focusedShipIndex} shipsData={shipsData} />
 
       <hemisphereLight args={[0xd4e8ff, 0x0a1628, 0.6]} />
