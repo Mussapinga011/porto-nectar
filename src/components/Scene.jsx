@@ -604,15 +604,23 @@ const CameraAnimator = ({ focusedShipIndex, shipsData }) => {
   useFrame(() => {
     TWEEN.update();
     if (controls) {
-      // Bloqueia e corrige a altura e profundidade do alvo (mantendo o flutuar suave no Y)
+      // 1. Limita o arrasto horizontal (X) para não sair dos limites do cais/mapa
+      const MIN_X = -850;
+      const MAX_X = 850;
+      controls.target.x = Math.max(MIN_X, Math.min(MAX_X, controls.target.x));
+
+      // 2. Bloqueia e corrige a altura e profundidade do alvo (mantendo o flutuar suave no Y)
       controls.target.y = FIXED_TARGET_Y + Math.sin(Date.now() * 0.001) * 1.5;
       controls.target.z = FIXED_TARGET_Z;
 
-      // Bloqueia e corrige a altura e profundidade da câmara
+      // 3. Força a câmara a acompanhar exatamente o X do alvo (mantendo alinhamento perfeito de perspetiva)
+      camera.position.x = controls.target.x;
+
+      // 4. Bloqueia e corrige a altura e profundidade da câmara
       camera.position.y = FIXED_CAM_Y;
       camera.position.z = FIXED_CAM_Z;
       
-      // Sincroniza a posição atual de arrasto manual de volta para o Ref base
+      // 5. Sincroniza a posição atual de arrasto manual de volta para o Ref base
       baseTargetRef.current.x = controls.target.x;
     }
   });
